@@ -65,5 +65,5 @@ The agent follows a **ReAct** (Reason + Act) pattern:
 3. **Action:** If yes, it queries the Tavily Search API.
 4. **Observation:** It reads the search results.
 5. **Loop:** It determines if it has enough info to answer or needs to search again.
-6. **Output:** Final synthesized answer delivered to the Streamlit UI.
+6. **Output:** Final synthesized answer delivered to the Streamlit UI .
 
