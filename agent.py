@@ -10,7 +10,7 @@ warnings.filterwarnings("ignore")
 import os
 from dotenv import load_dotenv
 from typing import Annotated
-from typing_extensions import TypedDict
+from typing_extensions import NotRequired, TypedDict
 
 from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
@@ -21,6 +21,7 @@ from langgraph.prebuilt import ToolNode, tools_condition
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_tavily import TavilySearch
+from rl_policy import ReinforcementPolicy
 
 # Load .env for local development
 load_dotenv()
@@ -39,6 +40,9 @@ if not tavily_key:
 search_tool = TavilySearch(max_results=3, tavily_api_key=tavily_key)
 tools = [search_tool]
 
+# Initialize lightweight RL policy (persisted across runs)
+rl_policy = ReinforcementPolicy(file_path="rl_policy.json")
+
 # 3. CONFIGURE LLM
 # temperature=0 makes it factual (good for research)
 llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0)
@@ -49,6 +53,8 @@ llm_with_tools = llm.bind_tools(tools)
 class AgentState(TypedDict):
     # Ensure new messages are appended to history
     messages: Annotated[list, add_messages]
+    rl_state: NotRequired[str]
+    rl_action: NotRequired[str]
 
 
 # 5. DEFINE NODES
@@ -57,6 +63,16 @@ def chatbot(state: AgentState):
     """
     The 'Brain' node. Decides what to do.
     """
+    latest_user_message = ""
+    for msg in reversed(state["messages"]):
+        if isinstance(msg, HumanMessage):
+            latest_user_message = msg.content if isinstance(msg.content, str) else str(msg.content)
+            break
+
+    selected_state = rl_policy.classify_state(latest_user_message)
+    selected_action = rl_policy.choose_action(selected_state)
+    style_instruction = rl_policy.get_style_instruction(selected_action)
+
     system_instruction = SystemMessage(
         content="""
         You are a helpful research assistant. You have access to a search engine (Tavily).
@@ -67,14 +83,92 @@ def chatbot(state: AgentState):
         - Just search, read the results, and provide the answer.
         """
     )
+
+    strategy_instruction = SystemMessage(
+        content=(
+            "Adaptive response policy selected for this turn: "
+            f"'{selected_action}'. {style_instruction}"
+        )
+    )
     
     # Add system message to history
-    messages = [system_instruction] + state["messages"]
+    messages = [system_instruction, strategy_instruction] + state["messages"]
     
     # Invoke the LLM
     response = llm_with_tools.invoke(messages)
     
-    return {"messages": [response]}
+    return {
+        "messages": [response],
+        "rl_state": selected_state,
+        "rl_action": selected_action,
+    }
+
+
+def _extract_text(content):
+    """Normalize provider-specific message content formats to plain text."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        text_chunks = []
+        for item in content:
+            if isinstance(item, dict):
+                chunk = item.get("text")
+                if chunk:
+                    text_chunks.append(str(chunk))
+            elif item:
+                text_chunks.append(str(item))
+        return "\n".join(text_chunks)
+    return str(content)
+
+
+def _thread_id_from_config(config: RunnableConfig | str) -> str:
+    if isinstance(config, str):
+        return config
+    if isinstance(config, dict):
+        configurable = config.get("configurable", {})
+        if isinstance(configurable, dict) and configurable.get("thread_id"):
+            return str(configurable["thread_id"])
+    return "1"
+
+
+def _config_for_thread(thread_id: str) -> RunnableConfig:
+    return {"configurable": {"thread_id": thread_id}}
+
+
+def get_last_response_metadata(config: RunnableConfig | str):
+    """Return latest assistant text and RL metadata for a thread."""
+    thread_id = _thread_id_from_config(config)
+    snapshot = app.get_state(_config_for_thread(thread_id))
+    if not snapshot.values:
+        return {
+            "text": "",
+            "rl_state": "general",
+            "rl_action": "detailed",
+        }
+
+    values = snapshot.values
+    messages = values.get("messages", [])
+    last_content = messages[-1].content if messages else ""
+    return {
+        "text": _extract_text(last_content),
+        "rl_state": values.get("rl_state", "general"),
+        "rl_action": values.get("rl_action", "detailed"),
+    }
+
+
+def submit_feedback(config: RunnableConfig | str, reward: float) -> float:
+    """Apply reward to the latest policy choice for the thread."""
+    metadata = get_last_response_metadata(config)
+    return rl_policy.update(
+        state=metadata["rl_state"],
+        action=metadata["rl_action"],
+        reward=reward,
+        next_state=metadata["rl_state"],
+    )
+
+
+def get_policy_snapshot():
+    return rl_policy.snapshot()
 
 
 # ToolNode automatically executes whatever tools the LLM asks for
@@ -141,4 +235,14 @@ if __name__ == "__main__":
                 print(content[0]['text'])
             else:
                 print(content)
+
+            # Always learn a little after each answer.
+            submit_feedback(thread, reward=0.05)
+
+            user_feedback = input("Feedback (+ helpful / - not helpful / Enter skip): ").strip()
+            if user_feedback == "+":
+                submit_feedback(thread, reward=1.0)
+            elif user_feedback == "-":
+                submit_feedback(thread, reward=-1.0)
+
             print("-" * 50)

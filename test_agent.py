@@ -1,6 +1,7 @@
 import os
 import unittest
 from unittest.mock import patch
+from rl_policy import ReinforcementPolicy
 
 
 class TestAgentImport(unittest.TestCase):
@@ -48,6 +49,30 @@ class TestAgentImport(unittest.TestCase):
         self.assertIsNotNone(agent_module.search_tool)
         self.assertEqual(len(agent_module.tools), 1)
         self.assertEqual(agent_module.search_tool.name, "tavily_search")
+
+
+class TestReinforcementPolicy(unittest.TestCase):
+    """Test lightweight RL policy behavior."""
+
+    def setUp(self):
+        self.policy_file = "test_rl_policy.json"
+        if os.path.exists(self.policy_file):
+            os.remove(self.policy_file)
+        self.policy = ReinforcementPolicy(file_path=self.policy_file, epsilon=0.0)
+
+    def tearDown(self):
+        if os.path.exists(self.policy_file):
+            os.remove(self.policy_file)
+
+    def test_policy_classification(self):
+        self.assertEqual(self.policy.classify_state("What is the weather today?"), "realtime")
+        self.assertEqual(self.policy.classify_state("Compare Rust vs Go"), "comparison")
+        self.assertEqual(self.policy.classify_state("Explain how transformers work"), "explainer")
+
+    def test_policy_update_increases_q_value(self):
+        before = self.policy.snapshot()["general"]["detailed"]
+        after = self.policy.update("general", "detailed", reward=1.0, next_state="general")
+        self.assertGreater(after, before)
 
 
 if __name__ == "__main__":
