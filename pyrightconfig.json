@@ -1,0 +1,12 @@
+{
+  "typeCheckingMode": "basic",
+  "reportMissingTypeStubs": false,
+  "reportUnknownMemberType": false,
+  "reportUnknownVariableType": false,
+  "reportUnknownArgumentType": false,
+  "reportUnknownParameterType": false,
+  "reportUnknownLambdaType": false,
+  "reportUnknownTypedDictType": false,
+  "reportUnknownSymbolType": false,
+  "reportUnnecessaryIsInstance": false
+}

@@ -1,0 +1,38 @@
+{
+  "coding": {
+    "concise": 0.0,
+    "detailed": 0.0,
+    "step_by_step": 0.0,
+    "with_citations": 0.0
+  },
+  "comparison": {
+    "concise": 0.0,
+    "detailed": 0.0,
+    "step_by_step": 0.0,
+    "with_citations": 0.0
+  },
+  "explainer": {
+    "concise": 0.0,
+    "detailed": 0.0,
+    "step_by_step": 0.0,
+    "with_citations": 0.0
+  },
+  "general": {
+    "concise": -0.2,
+    "detailed": 0.0,
+    "step_by_step": 0.0,
+    "with_citations": 0.0
+  },
+  "realtime": {
+    "concise": 0.0,
+    "detailed": 0.0,
+    "step_by_step": 0.0,
+    "with_citations": 0.0
+  },
+  "summary": {
+    "concise": 0.0,
+    "detailed": 0.0,
+    "step_by_step": 0.0,
+    "with_citations": 0.0
+  }
+}

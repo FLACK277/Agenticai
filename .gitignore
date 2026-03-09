@@ -1,5 +1,6 @@
 # Secrets (NEVER UPLOAD THESE)
 .env
+.streamlit/secrets.toml
 
 # Python compilation junk
 __pycache__/
